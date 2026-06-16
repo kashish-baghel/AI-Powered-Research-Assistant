@@ -44,7 +44,7 @@ public class ResearchService {
                 .defaultHeader("Content-Type", "application/json")
                 .build();
 
-        String apiKey = "AIzaSyAR7myr4ebxZRpShBsOVVBvNN0JSMiIZwk";
+        String apiKey = "your_api";
 
         String requestbody = """
 {
