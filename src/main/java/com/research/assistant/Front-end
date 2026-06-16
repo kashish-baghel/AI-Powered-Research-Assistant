@@ -26,3 +26,169 @@
     <script src="sidepanel.js"></script>
 </body>
 </html>
+
+//sidepanel.css
+body {
+    margin: 0;
+    padding: 15px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.header {
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.header h2 {
+    margin: 0px;
+    color: #1a73e8;
+}
+
+.actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+button {
+    padding: 8px 16px;
+    background-color: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #1557b0;
+}
+
+.notes textarea {
+    width: 100%;
+    height: 200px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+    margin-bottom: 10px;
+}
+
+#results {
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    margin-top: 20px;
+}
+
+.result-item {
+    background: white;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.result-content {
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+
+//sidepanel.js
+document.addEventListener('DOMContentLoaded', () => {
+    chrome.storage.local.get(['researchNotes'], function(result) {
+       if (result.researchNotes) {
+        document.getElementById('notes').value = result.researchNotes;
+       } 
+    });
+
+    document.getElementById('summarizeBtn').addEventListener('click', summarizeText);
+    document.getElementById('saveNotesBtn').addEventListener('click', saveNotes);
+});
+
+
+async function summarizeText() {
+    try {
+        const [tab] = await chrome.tabs.query({ active:true, currentWindow: true});
+        const [{ result }] = await chrome.scripting.executeScript({
+            target: {tabId: tab.id},
+            function: () => window.getSelection().toString()
+        });
+
+        if (!result) {
+            showResult('Please select some text first');
+            return;
+        }
+
+        const response = await fetch('http://localhost:8080/api/research/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: result, operation: 'summarize'})
+        });
+
+        if (!response.ok) {
+            throw new Error(`API Error: ${response.status}`);
+        }
+
+        const text = await response.text();
+        showResult(text.replace(/\n/g,'<br>'));
+
+    } catch (error) {
+        showResult('Error: ' + error.message);
+    }
+}
+
+
+async function saveNotes() {
+    const notes = document.getElementById('notes').value;
+    chrome.storage.local.set({ 'researchNotes': notes}, function() {
+        alert('Notes saved successfully');
+    });
+}
+
+
+function showResult(content) {
+    document.getElementById('results').innerHTML = `<div class="result-item"><div class="result-content">${content}</div>
+    </div>`;
+}
+
+
+//manifest.json
+{
+    "manifest_version": 3,
+    "name": "Research Assistant",
+    "version": "1.0",
+    "description": "AI-powered Research Assistant",
+    "permissions": [
+        "activeTab",
+        "storage",
+        "sidePanel",
+        "scripting"
+    ],
+    "action":{
+        "default_title":"Research Assistant" 
+    },
+    "side_panel":{
+        "default_path":"sidepanel.html"
+    },
+    "background":{
+        "service_worker": "background.js"
+    },
+    "host_permissions": [
+        "http://localhost:8080/*",
+        "<all_urls>"
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'"
+    }
+}
+
+//background,js
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+
